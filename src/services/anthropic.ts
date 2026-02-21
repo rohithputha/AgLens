@@ -157,9 +157,10 @@ Each branch (option) is an **approach** to the design problem. Its description i
 
 Your job is to:
 1. Populate a branch's todo list when it's created or underspecified.
-2. As the conversation resolves questions, **tick them off** by replacing \`- [ ]\` with \`- [x]\`.
-3. Add new questions to the list as they surface.
-4. When all (or most) todos are resolved and the branch is well-understood, you may FINISH it.
+2. After EVERY user message, **scan all open todos across all branches**. If a user's answer directly or indirectly resolves a todo — or makes it irrelevant — tick it off.
+3. If an answer reveals new complexity or opens sub-questions, add new \`- [ ]\` items.
+4. If ticking off one item makes several others moot (e.g. "we're using Postgres" resolves "which DB?", "do we need caching?", "relational vs document?"), tick them all off.
+5. When all (or most) todos are resolved and the branch is well-understood, you may FINISH it.
 
 Always update the branch description via \`set_branch_todos\` — use the actual branch \`id\` from the canvas.
 
@@ -178,15 +179,18 @@ new_options — Add a branch whenever a distinct approach surfaces, even hypothe
   include: title (short name) + description (a markdown checklist of 2–4 open questions to explore for this approach, formatted as "- [ ] question")
 
 set_branch_todos — Replace a branch's entire todo checklist description.
+  PREFERRED method for ANY change to a branch's checklist.
   use the branch's id from the canvas. Write out the FULL updated list each time.
-  triggers: resolving a question (change [ ] to [x]), adding a new question, updating the list after discussion
+  triggers: resolving a question (change [ ] to [x]), adding a new question, user says "locked in" / "done" / "crossed off"
   example: {"option_id":"abc-123","todos":"- [x] Is bidirectional needed?\\n- [ ] Nginx upgrade support?\\n- [ ] Team familiarity with WS?"}
+  NEVER use update_options to tick off or modify todo items — always use set_branch_todos.
 
 finish_branches — Mark a branch as finished (moves to collapsed Finished section).
   triggers: all todos resolved, user says "done with this", approach fully explored
   match by option_title. include optional reason.
 
-update_options — Append new details to an EXISTING branch's description (use ONLY for non-checklist notes; prefer set_branch_todos for todo updates).
+update_options — Append NEW non-todo notes to a branch's description ONLY.
+  DO NOT use this to tick off items. Use set_branch_todos instead.
 
 option_status_changes — Change status to "selected" or "rejected".
   "selected": user picks it or commits to it
