@@ -152,7 +152,15 @@ Use this format exactly:
 {"problem_statement_update":null,"new_options":[],"option_status_changes":[],"new_decisions":[],"new_constraints":[],"new_open_questions":[],"resolved_questions":[]}
 </design_extract>
 
-Only add net-new items from this turn.`;
+Rules for populating the extract — be proactive, not passive:
+- new_options: add a branch whenever the user or conversation surfaces a distinct approach worth exploring (e.g. "we could use X or Y", "what about Z"). Each option needs a title and short description.
+- new_decisions: add a decision whenever something is settled in this turn — the user says "let's go with X", picks an approach, or you recommend one and they agree. Capture the reasoning and trade-offs concisely.
+- option_status_changes: mark an option "selected" when a decision is made for it, "rejected" when it's ruled out.
+- new_constraints: add a constraint when a hard requirement or limitation surfaces (technical, business, or resource).
+- new_open_questions: add a question when something important is unresolved and needs answering before proceeding.
+- resolved_questions: mark a question resolved when this turn's conversation answers it.
+- problem_statement_update: set this if the problem becomes clearer or is restated.
+Only include items that are genuinely new this turn. Do not re-add existing canvas items.`;
 }
 
 function buildCrystallizePrompt(space: DesignSpace): string {
