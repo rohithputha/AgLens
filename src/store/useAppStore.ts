@@ -1036,6 +1036,15 @@ export const useAppStore = create<AppState>()(
               refs.push({ type: "option", id });
             }
 
+            for (const upd of extract.update_options ?? []) {
+              const target = canvas.options.find((item) => item.id === upd.id);
+              if (target && upd.description?.trim()) {
+                target.description = target.description
+                  ? `${target.description}\n${upd.description.trim()}`
+                  : upd.description.trim();
+              }
+            }
+
             for (const change of extract.option_status_changes) {
               const target = canvas.options.find((item) => isNearDuplicate(item.title, change.option_title));
               if (!target) {
@@ -1066,6 +1075,22 @@ export const useAppStore = create<AppState>()(
                 source_messages: [{ message_id: messageId }],
               });
               refs.push({ type: "decision", id });
+            }
+
+            for (const upd of extract.update_decisions ?? []) {
+              const target = canvas.decisions.find((item) => item.id === upd.id);
+              if (target) {
+                if (upd.reasoning?.trim()) {
+                  target.reasoning = target.reasoning
+                    ? `${target.reasoning}\n${upd.reasoning.trim()}`
+                    : upd.reasoning.trim();
+                }
+                if (upd.trade_offs?.trim()) {
+                  target.trade_offs = target.trade_offs
+                    ? `${target.trade_offs}\n${upd.trade_offs.trim()}`
+                    : upd.trade_offs.trim();
+                }
+              }
             }
 
             for (const constraint of extract.new_constraints) {

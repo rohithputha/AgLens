@@ -127,6 +127,10 @@ export interface DesignExtract {
     description: string;
     status: OptionStatus;
   }>;
+  update_options: Array<{
+    id: string;
+    description: string;
+  }>;
   option_status_changes: Array<{
     option_title: string;
     new_status: Extract<OptionStatus, "selected" | "rejected">;
@@ -136,6 +140,11 @@ export interface DesignExtract {
     title: string;
     reasoning: string;
     trade_offs: string;
+  }>;
+  update_decisions: Array<{
+    id: string;
+    reasoning?: string;
+    trade_offs?: string;
   }>;
   new_constraints: Array<{
     description: string;

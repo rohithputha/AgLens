@@ -149,18 +149,47 @@ Branch context:${JSON.stringify(branch)}
 After every response append a JSON block wrapped in <design_extract> tags.
 Use this format exactly:
 <design_extract>
-{"problem_statement_update":null,"new_options":[],"option_status_changes":[],"new_decisions":[],"new_constraints":[],"new_open_questions":[],"resolved_questions":[]}
+{"problem_statement_update":null,"new_options":[],"update_options":[],"option_status_changes":[],"new_decisions":[],"update_decisions":[],"new_constraints":[],"new_open_questions":[],"resolved_questions":[]}
 </design_extract>
 
-Rules for populating the extract — be proactive, not passive:
-- new_options: add a branch whenever the user or conversation surfaces a distinct approach worth exploring (e.g. "we could use X or Y", "what about Z"). Each option needs a title and short description.
-- new_decisions: add a decision whenever something is settled in this turn — the user says "let's go with X", picks an approach, or you recommend one and they agree. Capture the reasoning and trade-offs concisely.
-- option_status_changes: mark an option "selected" when a decision is made for it, "rejected" when it's ruled out.
-- new_constraints: add a constraint when a hard requirement or limitation surfaces (technical, business, or resource).
-- new_open_questions: add a question when something important is unresolved and needs answering before proceeding.
-- resolved_questions: mark a question resolved when this turn's conversation answers it.
-- problem_statement_update: set this if the problem becomes clearer or is restated.
-Only include items that are genuinely new this turn. Do not re-add existing canvas items.`;
+Be AGGRESSIVE. Every turn should populate multiple fields. When in doubt, add it.
+
+WHEN TO USE EACH FIELD:
+
+new_options — Add a branch whenever a distinct approach surfaces, even hypothetically.
+  triggers: "we could use X", "another approach is Y", "what about Z", any comparison of strategies
+  include: title (short name for the approach) + description (what it is, why consider it)
+
+update_options — Append new details to an EXISTING branch's description.
+  triggers: any new information, trade-off, nuance, or context about an existing approach
+  use the branch's id from the canvas. append, don't repeat what's already there.
+
+option_status_changes — Change an option's status.
+  "selected" when: user picks it, you recommend it and they agree, a decision is made for it
+  "rejected" when: user rules it out, it clearly doesn't fit
+
+new_decisions — Add a decision whenever something is SETTLED this turn.
+  triggers: "let's use X", "we'll go with Y", user confirms an approach, you make a strong recommendation they accept
+  include: title (what was decided) + reasoning (why) + trade_offs (what's given up)
+
+update_decisions — Append new context to an EXISTING decision's reasoning or trade_offs.
+  triggers: any new detail, implication, or nuance about an already-made decision
+  use the decision's id from the canvas.
+
+new_constraints — Add whenever a hard requirement or limit is stated.
+  triggers: "must", "can't", "required", "budget is X", "team only knows Y", "latency must be under Z"
+  even soft constraints ("we'd prefer") count if they'll shape the design
+
+new_open_questions — Add whenever something IMPORTANT is unresolved.
+  triggers: any uncertainty that would change the design if answered differently
+  include a short context explaining why it matters
+
+resolved_questions — Mark resolved whenever this turn's conversation settles an open question.
+  match by the question text from the canvas.
+
+problem_statement_update — Restate the problem only if it materially changes or sharpens this turn.
+
+Do NOT re-add items already in the canvas. Do NOT leave everything empty — if you said something useful, capture it.`;
 }
 
 function buildCrystallizePrompt(space: DesignSpace): string {

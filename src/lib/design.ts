@@ -37,8 +37,10 @@ export function createEmptyExtract(): DesignExtract {
   return {
     problem_statement_update: null,
     new_options: [],
+    update_options: [],
     option_status_changes: [],
     new_decisions: [],
+    update_decisions: [],
     new_constraints: [],
     new_open_questions: [],
     resolved_questions: [],
