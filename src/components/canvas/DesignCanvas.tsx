@@ -580,85 +580,118 @@ export function DesignCanvas({ spaceId, onJumpToMessage }: DesignCanvasProps) {
         )}
 
         {/* ── OPEN QUESTIONS ── */}
-        {(questions.length > 0 || activeDropSection === "open_questions") && (
-          <div
-            onDragOver={(e) => { e.preventDefault(); setDropSection("open_questions"); }}
-            onDragLeave={() => setDropSection(null)}
-            onDrop={(e) => dropFromMessage("open_questions", e)}
-          >
-            <Section title="Questions" count={questions.filter((q) => q.status === "open").length} onAdd={() => addQuestion(spaceId)}>
-              <DropHint active={activeDropSection === "open_questions"} />
-              {questions.map((question) => (
-                <div
-                  key={question.id}
-                  className={`group relative rounded-xl border bg-white px-4 py-3 transition-all ${
-                    question.status === "resolved" ? "border-slate-100 opacity-50" : "border-slate-100 hover:border-slate-200"
-                  }`}
-                  draggable
-                  onDragStart={(e) => startAttachableDrag(e, "question", question.id)}
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={(e) => dropOnAttachableCard(e, "question", question.id)}
-                >
-                  <div className="absolute left-0 top-3 bottom-3 w-[3px] rounded-full bg-violet-300" />
-                  <div className="mb-1.5 flex items-center justify-between">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={question.status === "resolved"}
-                        onChange={() => toggleQuestionStatus(spaceId, question.id)}
-                        className="h-3 w-3 rounded accent-violet-500"
-                      />
-                      <span className="text-[11px] text-slate-300">
-                        {question.status === "resolved" ? "Resolved" : "Open"}
-                      </span>
-                    </label>
-                    <div className="flex gap-3 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button type="button" className="text-[11px] text-slate-300 hover:text-red-400 transition-colors" onClick={() => deleteQuestion(spaceId, question.id)}>
-                        ✕
-                      </button>
-                    </div>
-                  </div>
-                  <input
-                    value={question.question}
-                    onChange={(e) => updateQuestion(spaceId, question.id, { question: e.target.value })}
-                    className="w-full bg-transparent text-sm font-medium text-slate-700 placeholder:text-slate-300 focus:outline-none"
-                    placeholder="Question"
-                  />
-                  <textarea
-                    value={question.context}
-                    onChange={(e) => updateQuestion(spaceId, question.id, { context: e.target.value })}
-                    rows={1}
-                    className="mt-1 w-full resize-none bg-transparent text-xs text-slate-400 placeholder:text-slate-300 focus:outline-none"
-                    placeholder="Context"
-                  />
-                  {bindableDecisions.length > 0 && (
-                    <select
-                      className="mt-1 w-full bg-transparent text-[11px] text-slate-400 focus:outline-none cursor-pointer"
-                      value={question.decision_id ?? ""}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        if (!v) updateQuestion(spaceId, question.id, { decision_id: undefined });
-                        else linkToDecision(spaceId, { kind: "question", itemId: question.id, decisionId: v });
-                      }}
-                    >
-                      <option value="">Unlinked</option>
-                      {bindableDecisions.map((d) => <option key={d.id} value={d.id}>{d.label}</option>)}
-                    </select>
-                  )}
-                </div>
-              ))}
-            </Section>
-          </div>
-        )}
+        {(() => {
+          const openQuestions = questions.filter((q) => q.status === "open");
+          const resolvedQuestions = questions.filter((q) => q.status === "resolved");
 
-        {questions.length === 0 && activeDropSection !== "open_questions" && (
-          <div
-            className="rounded-xl border border-dashed border-slate-100 px-4 py-2.5 text-[11px] text-slate-300 hover:border-slate-200 transition-colors cursor-default"
-            onDragOver={(e) => { e.preventDefault(); setDropSection("open_questions"); }}
-          >
-            Drop to add a question
-          </div>
-        )}
+          const renderQuestionCard = (question: typeof questions[0]) => (
+            <div
+              key={question.id}
+              className="group relative rounded-xl border border-slate-100 bg-white px-4 py-3 hover:border-slate-200 transition-all"
+              draggable
+              onDragStart={(e) => startAttachableDrag(e, "question", question.id)}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => dropOnAttachableCard(e, "question", question.id)}
+            >
+              <div className="absolute left-0 top-3 bottom-3 w-[3px] rounded-full bg-violet-300" />
+              <div className="mb-1.5 flex items-center justify-between">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={question.status === "resolved"}
+                    onChange={() => toggleQuestionStatus(spaceId, question.id)}
+                    className="h-3 w-3 rounded accent-violet-500"
+                  />
+                  <span className="text-[11px] text-slate-300">Open</span>
+                </label>
+                <div className="flex gap-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button type="button" className="text-[11px] text-slate-300 hover:text-red-400 transition-colors" onClick={() => deleteQuestion(spaceId, question.id)}>
+                    ✕
+                  </button>
+                </div>
+              </div>
+              <input
+                value={question.question}
+                onChange={(e) => updateQuestion(spaceId, question.id, { question: e.target.value })}
+                className="w-full bg-transparent text-sm font-medium text-slate-700 placeholder:text-slate-300 focus:outline-none"
+                placeholder="Question"
+              />
+              <textarea
+                value={question.context}
+                onChange={(e) => updateQuestion(spaceId, question.id, { context: e.target.value })}
+                rows={1}
+                className="mt-1 w-full resize-none bg-transparent text-xs text-slate-400 placeholder:text-slate-300 focus:outline-none"
+                placeholder="Context"
+              />
+              {bindableDecisions.length > 0 && (
+                <select
+                  className="mt-1 w-full bg-transparent text-[11px] text-slate-400 focus:outline-none cursor-pointer"
+                  value={question.decision_id ?? ""}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (!v) updateQuestion(spaceId, question.id, { decision_id: undefined });
+                    else linkToDecision(spaceId, { kind: "question", itemId: question.id, decisionId: v });
+                  }}
+                >
+                  <option value="">Unlinked</option>
+                  {bindableDecisions.map((d) => <option key={d.id} value={d.id}>{d.label}</option>)}
+                </select>
+              )}
+            </div>
+          );
+
+          return (
+            <>
+              {(openQuestions.length > 0 || activeDropSection === "open_questions") && (
+                <div
+                  onDragOver={(e) => { e.preventDefault(); setDropSection("open_questions"); }}
+                  onDragLeave={() => setDropSection(null)}
+                  onDrop={(e) => dropFromMessage("open_questions", e)}
+                >
+                  <Section title="Questions" count={openQuestions.length} onAdd={() => addQuestion(spaceId)}>
+                    <DropHint active={activeDropSection === "open_questions"} />
+                    {openQuestions.map(renderQuestionCard)}
+                  </Section>
+                </div>
+              )}
+
+              {openQuestions.length === 0 && activeDropSection !== "open_questions" && resolvedQuestions.length === 0 && (
+                <div
+                  className="rounded-xl border border-dashed border-slate-100 px-4 py-2.5 text-[11px] text-slate-300 hover:border-slate-200 transition-colors cursor-default"
+                  onDragOver={(e) => { e.preventDefault(); setDropSection("open_questions"); }}
+                >
+                  Drop to add a question
+                </div>
+              )}
+
+              {resolvedQuestions.length > 0 && (
+                <details className="group/ans">
+                  <summary className="cursor-pointer list-none flex items-center gap-2 select-none">
+                    <span className="text-[11px] font-semibold uppercase tracking-widest text-slate-300 group-open/ans:text-slate-400 transition-colors">
+                      Answered
+                    </span>
+                    <span className="text-[11px] text-slate-300">{resolvedQuestions.length}</span>
+                  </summary>
+                  <div className="mt-2 space-y-1.5">
+                    {resolvedQuestions.map((question) => (
+                      <div key={question.id} className="flex items-center justify-between rounded-lg border border-slate-100 bg-slate-50 px-4 py-2.5">
+                        <span className="text-sm text-slate-400 line-through">{question.question || "Untitled"}</span>
+                        <div className="flex gap-3">
+                          <button type="button" className="text-[11px] text-slate-400 hover:text-slate-600 transition-colors" onClick={() => toggleQuestionStatus(spaceId, question.id)}>
+                            Reopen
+                          </button>
+                          <button type="button" className="text-[11px] text-slate-300 hover:text-red-400 transition-colors" onClick={() => deleteQuestion(spaceId, question.id)}>
+                            ✕
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              )}
+            </>
+          );
+        })()}
 
         {/* ── REFERENCES ── */}
         {(references.length > 0 || activeDropSection === "references") && (
