@@ -245,9 +245,9 @@ export const ConversationPanel = forwardRef<ConversationPanelHandle, Conversatio
         >
           {/* Section header */}
           <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
-            <span className="text-[11px] font-medium uppercase tracking-widest text-slate-400">
+            <h2 className="text-[11px] font-medium uppercase tracking-widest text-slate-400">
               Conversation
-            </span>
+            </h2>
             <div className="flex items-center gap-3">
               <button
                 type="button"

@@ -100,7 +100,13 @@ export default function App() {
     if (withSample) createSampleSpace();
   }
 
-  if (!activeSpace) return null;
+  if (!activeSpace) {
+    return (
+      <>
+        {showOnboarding && <OnboardingModal onDismiss={dismissOnboarding} />}
+      </>
+    );
+  }
 
   return (
     <div className="flex h-screen flex-col bg-slate-50 text-slate-900">
