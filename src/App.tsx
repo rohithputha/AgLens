@@ -113,7 +113,7 @@ export default function App() {
         hasOutput={!!activeSpace.outputs.design_doc}
       />
 
-      <main ref={mainRef} className="flex min-h-0 flex-1">
+      <main ref={mainRef} className="flex min-h-0 flex-1" onDragOver={(e) => e.preventDefault()}>
         <ConversationPanel
           ref={conversationRef}
           spaceId={activeSpace.id}

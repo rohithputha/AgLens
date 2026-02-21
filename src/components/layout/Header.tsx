@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+
+const VALID_MODELS = ["claude-sonnet-4-6", "claude-opus-4-6"];
 import { estimateContextTokens, modelContextWindow } from "../../lib/tokens";
 import { useAppStore } from "../../store/useAppStore";
 
@@ -29,6 +31,13 @@ export function Header({
   const updateSpaceTitle = useAppStore((s) => s.updateSpaceTitle);
   const setApiKey = useAppStore((s) => s.setApiKey);
   const setModel = useAppStore((s) => s.setModel);
+
+  // Fix any stale model value persisted from a previous session
+  useEffect(() => {
+    if (!VALID_MODELS.includes(model)) {
+      setModel("claude-sonnet-4-6");
+    }
+  }, [model, setModel]);
 
   const activeSpace = spaces.find((s) => s.id === activeSpaceId) ?? spaces[0];
 

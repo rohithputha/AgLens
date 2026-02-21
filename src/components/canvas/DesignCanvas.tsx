@@ -1,6 +1,93 @@
-import { type DragEvent, useState } from "react";
+import { type DragEvent, useCallback, useRef, useState } from "react";
 import { useAppStore, type CanvasDropTarget } from "../../store/useAppStore";
 import { parseDragPayload, setDragPayload, type CanvasSection } from "../../hooks/useDragDrop";
+
+function extractDragText(event: DragEvent): string {
+  const payload = parseDragPayload(event);
+  if (payload?.kind === "message-fragment") return payload.text;
+  return (event.dataTransfer.getData("text/plain") ?? "").trim();
+}
+
+// Prevent browser default "no-drop" cursor everywhere inside the canvas.
+// This is critical: without it, dragging between sections or over gaps
+// causes the browser to reject the drop and sometimes kill the drag session.
+function allowDrop(e: React.DragEvent) {
+  e.preventDefault();
+}
+
+// ── SubField ────────────────────────────────────────────────────────────────
+// Collapsed "+ Label" button when empty; expands to a labeled subcard block.
+
+function SubField({
+  label,
+  value,
+  onChange,
+  placeholder,
+  rows = 2,
+  onDropText,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  rows?: number;
+  onDropText: (text: string) => void;
+}) {
+  const [focused, setFocused] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const taRef = useRef<HTMLTextAreaElement>(null);
+  // expanded when: has content, focused, or being dragged over
+  const expanded = focused || !!value || isDragOver;
+
+  return (
+    <div
+      className={`mt-2 rounded-lg transition-all duration-150 ${
+        isDragOver
+          ? "bg-blue-50 ring-1 ring-blue-200 px-3 py-2"
+          : expanded
+          ? "bg-slate-50 px-3 py-2"
+          : "border border-dashed border-slate-200 px-3 py-1.5 cursor-text hover:border-slate-300"
+      }`}
+      onClick={() => {
+        setFocused(true);
+        setTimeout(() => taRef.current?.focus(), 0);
+      }}
+      onDragOver={(e) => {
+        e.preventDefault();
+        if (!isDragOver) setIsDragOver(true);
+      }}
+      onDragLeave={() => setIsDragOver(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragOver(false);
+        const text = extractDragText(e as unknown as DragEvent);
+        if (text) onDropText(text);
+      }}
+    >
+      <span
+        className={
+          expanded
+            ? "block text-[10px] font-medium uppercase tracking-widest text-slate-400 mb-1"
+            : "text-[11px] text-slate-400"
+        }
+      >
+        {expanded ? label : `+ ${label}`}
+      </span>
+      <textarea
+        ref={taRef}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        rows={rows}
+        placeholder={placeholder ?? label}
+        style={{ display: expanded ? undefined : "none" }}
+        className="w-full resize-none bg-transparent text-xs text-slate-600 placeholder:text-slate-300 focus:outline-none"
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+      />
+    </div>
+  );
+}
 
 interface DesignCanvasProps {
   spaceId: string;
@@ -76,7 +163,16 @@ function DropHint({ active }: { active: boolean }) {
 // ── Main component ─────────────────────────────────────────────────────────
 
 export function DesignCanvas({ spaceId, onJumpToMessage }: DesignCanvasProps) {
+  // Use ref + state combo: ref for real-time tracking (no re-renders during drag),
+  // state only updated on meaningful transitions to trigger visual hints.
+  const dropSectionRef = useRef<CanvasDropTarget | null>(null);
   const [activeDropSection, setActiveDropSection] = useState<CanvasDropTarget | null>(null);
+  const setDropSection = useCallback((section: CanvasDropTarget | null) => {
+    if (dropSectionRef.current !== section) {
+      dropSectionRef.current = section;
+      setActiveDropSection(section);
+    }
+  }, []);
 
   const spaces = useAppStore((s) => s.spaces);
   const activeSpace = spaces.find((s) => s.id === spaceId);
@@ -127,14 +223,14 @@ export function DesignCanvas({ spaceId, onJumpToMessage }: DesignCanvasProps) {
 
   function dropFromMessage(section: CanvasDropTarget, event: DragEvent) {
     event.preventDefault();
-    setActiveDropSection(null);
+    setDropSection(null);
     const payload = parseDragPayload(event);
     if (payload?.kind === "message-fragment") {
       dropTextToCanvas(spaceId, section, payload.text, payload.messageId);
       return;
     }
     if (payload?.kind === "canvas-item") return;
-    const plain = event.dataTransfer.getData("text/plain").trim();
+    const plain = (event.dataTransfer.getData("text/plain") ?? "").trim();
     if (plain) dropTextToCanvas(spaceId, section, plain);
   }
 
@@ -150,15 +246,19 @@ export function DesignCanvas({ spaceId, onJumpToMessage }: DesignCanvasProps) {
 
   function dropOnDecisionCard(event: DragEvent, decisionId: string, optionId?: string) {
     event.preventDefault();
+    event.stopPropagation();
+    setDropSection(null);
     const payload = parseDragPayload(event);
     if (!payload) return;
     if (payload.kind === "message-fragment") {
+      // Drop onto the card body → populate the Reasoning subcard
       if (optionId) setActiveOption(spaceId, optionId);
-      const prevIds = new Set(canvas.constraints.map((c) => c.id));
-      dropTextToCanvas(spaceId, "constraints", payload.text, payload.messageId);
-      const freshSpace = useAppStore.getState().spaces.find((s) => s.id === spaceId);
-      const newC = freshSpace?.design_canvas.constraints.find((c) => !prevIds.has(c.id));
-      if (newC) linkToDecision(spaceId, { kind: "constraint", itemId: newC.id, decisionId });
+      const decision = canvas.decisions.find((d) => d.id === decisionId);
+      if (decision) {
+        updateDecision(spaceId, decisionId, {
+          reasoning: decision.reasoning ? `${decision.reasoning}\n${payload.text}` : payload.text,
+        });
+      }
       return;
     }
     if (payload.kind === "attachable") {
@@ -168,10 +268,21 @@ export function DesignCanvas({ spaceId, onJumpToMessage }: DesignCanvasProps) {
 
   function dropOnOptionCard(event: DragEvent, optionId: string) {
     event.preventDefault();
+    event.stopPropagation();
+    setDropSection(null);
     const payload = parseDragPayload(event);
+    // Reorder canvas items via drag
     if (payload?.kind === "canvas-item" && payload.section === "options") { moveOption(spaceId, payload.id, optionId); return; }
     if (payload?.kind === "canvas-item" && payload.section === "decisions") { updateDecision(spaceId, payload.id, { option_id: optionId }); setActiveOption(spaceId, optionId); return; }
-    if (payload?.kind === "message-fragment") { setActiveOption(spaceId, optionId); dropTextToCanvas(spaceId, "decisions", payload.text, payload.messageId); }
+    // Drop text onto card body → populate the Description subcard
+    if (payload?.kind === "message-fragment") {
+      const option = canvas.options.find((o) => o.id === optionId);
+      if (option) {
+        updateOption(spaceId, optionId, {
+          description: option.description ? `${option.description}\n${payload.text}` : payload.text,
+        });
+      }
+    }
   }
 
   function dropOnAttachableCard(event: DragEvent, itemType: "constraint" | "question" | "reference", itemId: string) {
@@ -194,13 +305,18 @@ export function DesignCanvas({ spaceId, onJumpToMessage }: DesignCanvasProps) {
   const rejectedOptions = options.filter((o) => o.status === "rejected");
 
   return (
-    <section className="min-h-0 flex-1 overflow-auto bg-white p-6">
+    <section
+      className="min-h-0 flex-1 overflow-auto bg-white p-6"
+      onDragOver={allowDrop}
+      onDrop={(e) => { e.preventDefault(); setDropSection(null); }}
+      onDragEnd={() => setDropSection(null)}
+    >
       <div className="mx-auto max-w-2xl space-y-8 pb-12">
 
         {/* ── PROBLEM ── */}
         <div
-          onDragOver={(e) => { e.preventDefault(); setActiveDropSection("problem_statement"); }}
-          onDragLeave={() => setActiveDropSection((p) => (p === "problem_statement" ? null : p))}
+          onDragOver={(e) => { e.preventDefault(); setDropSection("problem_statement"); }}
+          onDragLeave={() => setDropSection(null)}
           onDrop={(e) => dropFromMessage("problem_statement", e)}
         >
           <Section title="Problem">
@@ -217,8 +333,8 @@ export function DesignCanvas({ spaceId, onJumpToMessage }: DesignCanvasProps) {
 
         {/* ── BRANCHES ── */}
         <div
-          onDragOver={(e) => { e.preventDefault(); setActiveDropSection("options"); }}
-          onDragLeave={() => setActiveDropSection((p) => (p === "options" ? null : p))}
+          onDragOver={(e) => { e.preventDefault(); setDropSection("options"); }}
+          onDragLeave={() => setDropSection(null)}
           onDrop={(e) => dropFromMessage("options", e)}
         >
           <Section title="Branches" count={consideringOptions.length} onAdd={() => addOption(spaceId)}>
@@ -228,10 +344,10 @@ export function DesignCanvas({ spaceId, onJumpToMessage }: DesignCanvasProps) {
               return (
                 <div
                   key={option.id}
-                  className={`group relative rounded-xl border bg-white transition-all duration-150 ${
+                  className={`group relative rounded-xl border bg-white transition-all duration-200 ${
                     isFocused
-                      ? "border-blue-200 shadow-sm shadow-blue-100/50"
-                      : "border-slate-100 hover:border-slate-200 hover:shadow-sm"
+                      ? "border-blue-200 shadow-md shadow-blue-100/60"
+                      : "border-slate-100 hover:border-slate-200 hover:shadow-md hover:shadow-slate-100/80"
                   }`}
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={(e) => dropOnOptionCard(e, option.id)}
@@ -275,12 +391,11 @@ export function DesignCanvas({ spaceId, onJumpToMessage }: DesignCanvasProps) {
                       draggable
                       onDragStart={(e) => startCanvasItemDrag(e, "options", option.id)}
                     />
-                    <textarea
+                    <SubField
+                      label="Description"
                       value={option.description}
-                      onChange={(e) => updateOption(spaceId, option.id, { description: e.target.value })}
-                      rows={2}
-                      className="mt-1 w-full resize-none bg-transparent text-xs text-slate-500 placeholder:text-slate-300 focus:outline-none"
-                      placeholder="Description"
+                      onChange={(v) => updateOption(spaceId, option.id, { description: v })}
+                      onDropText={(text) => updateOption(spaceId, option.id, { description: option.description ? `${option.description}\n${text}` : text })}
                     />
                   </div>
                 </div>
@@ -321,8 +436,8 @@ export function DesignCanvas({ spaceId, onJumpToMessage }: DesignCanvasProps) {
 
         {/* ── DECISIONS ── */}
         <div
-          onDragOver={(e) => { e.preventDefault(); setActiveDropSection("decisions"); }}
-          onDragLeave={() => setActiveDropSection((p) => (p === "decisions" ? null : p))}
+          onDragOver={(e) => { e.preventDefault(); setDropSection("decisions"); }}
+          onDragLeave={() => setDropSection(null)}
           onDrop={(e) => dropFromMessage("decisions", e)}
         >
           <Section title="Decisions" count={decisions.length} onAdd={() => addDecision(spaceId)}>
@@ -335,7 +450,7 @@ export function DesignCanvas({ spaceId, onJumpToMessage }: DesignCanvasProps) {
               return (
                 <div
                   key={decision.id}
-                  className="group relative rounded-xl border border-slate-100 bg-white shadow-sm hover:border-slate-200 transition-all"
+                  className="group relative rounded-xl border border-slate-100 bg-white shadow-sm hover:border-slate-200 hover:shadow-md hover:shadow-slate-100/80 transition-all duration-200"
                   draggable
                   onDragStart={(e) => startCanvasItemDrag(e, "decisions", decision.id)}
                   onDragOver={(e) => e.preventDefault()}
@@ -374,19 +489,18 @@ export function DesignCanvas({ spaceId, onJumpToMessage }: DesignCanvasProps) {
                       className="w-full bg-transparent text-sm font-medium text-slate-800 placeholder:text-slate-300 focus:outline-none"
                       placeholder="Decision"
                     />
-                    <textarea
+                    <SubField
+                      label="Reasoning"
                       value={decision.reasoning}
-                      onChange={(e) => updateDecision(spaceId, decision.id, { reasoning: e.target.value })}
-                      rows={2}
-                      className="mt-1 w-full resize-none bg-transparent text-xs text-slate-500 placeholder:text-slate-300 focus:outline-none"
-                      placeholder="Reasoning"
+                      onChange={(v) => updateDecision(spaceId, decision.id, { reasoning: v })}
+                      onDropText={(text) => updateDecision(spaceId, decision.id, { reasoning: decision.reasoning ? `${decision.reasoning}\n${text}` : text })}
                     />
-                    <textarea
-                      value={decision.trade_offs}
-                      onChange={(e) => updateDecision(spaceId, decision.id, { trade_offs: e.target.value })}
+                    <SubField
+                      label="Trade-offs"
                       rows={1}
-                      className="mt-1 w-full resize-none bg-transparent text-xs text-slate-400 placeholder:text-slate-300 focus:outline-none"
-                      placeholder="Trade-offs"
+                      value={decision.trade_offs}
+                      onChange={(v) => updateDecision(spaceId, decision.id, { trade_offs: v })}
+                      onDropText={(text) => updateDecision(spaceId, decision.id, { trade_offs: decision.trade_offs ? `${decision.trade_offs}\n${text}` : text })}
                     />
                   </div>
                 </div>
@@ -401,8 +515,8 @@ export function DesignCanvas({ spaceId, onJumpToMessage }: DesignCanvasProps) {
         {/* ── CONSTRAINTS ── */}
         {(constraints.length > 0 || activeDropSection === "constraints") && (
           <div
-            onDragOver={(e) => { e.preventDefault(); setActiveDropSection("constraints"); }}
-            onDragLeave={() => setActiveDropSection((p) => (p === "constraints" ? null : p))}
+            onDragOver={(e) => { e.preventDefault(); setDropSection("constraints"); }}
+            onDragLeave={() => setDropSection(null)}
             onDrop={(e) => dropFromMessage("constraints", e)}
           >
             <Section title="Constraints" count={constraints.length} onAdd={() => addConstraint(spaceId)}>
@@ -459,7 +573,7 @@ export function DesignCanvas({ spaceId, onJumpToMessage }: DesignCanvasProps) {
         {constraints.length === 0 && activeDropSection !== "constraints" && (
           <div
             className="rounded-xl border border-dashed border-slate-100 px-4 py-2.5 text-[11px] text-slate-300 hover:border-slate-200 transition-colors cursor-default"
-            onDragOver={(e) => { e.preventDefault(); setActiveDropSection("constraints"); }}
+            onDragOver={(e) => { e.preventDefault(); setDropSection("constraints"); }}
           >
             Drop to add a constraint
           </div>
@@ -468,8 +582,8 @@ export function DesignCanvas({ spaceId, onJumpToMessage }: DesignCanvasProps) {
         {/* ── OPEN QUESTIONS ── */}
         {(questions.length > 0 || activeDropSection === "open_questions") && (
           <div
-            onDragOver={(e) => { e.preventDefault(); setActiveDropSection("open_questions"); }}
-            onDragLeave={() => setActiveDropSection((p) => (p === "open_questions" ? null : p))}
+            onDragOver={(e) => { e.preventDefault(); setDropSection("open_questions"); }}
+            onDragLeave={() => setDropSection(null)}
             onDrop={(e) => dropFromMessage("open_questions", e)}
           >
             <Section title="Questions" count={questions.filter((q) => q.status === "open").length} onAdd={() => addQuestion(spaceId)}>
@@ -540,7 +654,7 @@ export function DesignCanvas({ spaceId, onJumpToMessage }: DesignCanvasProps) {
         {questions.length === 0 && activeDropSection !== "open_questions" && (
           <div
             className="rounded-xl border border-dashed border-slate-100 px-4 py-2.5 text-[11px] text-slate-300 hover:border-slate-200 transition-colors cursor-default"
-            onDragOver={(e) => { e.preventDefault(); setActiveDropSection("open_questions"); }}
+            onDragOver={(e) => { e.preventDefault(); setDropSection("open_questions"); }}
           >
             Drop to add a question
           </div>
@@ -549,8 +663,8 @@ export function DesignCanvas({ spaceId, onJumpToMessage }: DesignCanvasProps) {
         {/* ── REFERENCES ── */}
         {(references.length > 0 || activeDropSection === "references") && (
           <div
-            onDragOver={(e) => { e.preventDefault(); setActiveDropSection("references"); }}
-            onDragLeave={() => setActiveDropSection((p) => (p === "references" ? null : p))}
+            onDragOver={(e) => { e.preventDefault(); setDropSection("references"); }}
+            onDragLeave={() => setDropSection(null)}
             onDrop={(e) => dropFromMessage("references", e)}
           >
             <Section title="References" count={references.length} defaultOpen={false}>
@@ -604,7 +718,7 @@ export function DesignCanvas({ spaceId, onJumpToMessage }: DesignCanvasProps) {
         {references.length === 0 && activeDropSection !== "references" && (
           <div
             className="rounded-xl border border-dashed border-slate-100 px-4 py-2.5 text-[11px] text-slate-300 hover:border-slate-200 transition-colors cursor-default"
-            onDragOver={(e) => { e.preventDefault(); setActiveDropSection("references"); }}
+            onDragOver={(e) => { e.preventDefault(); setDropSection("references"); }}
           >
             Drop to add a reference
           </div>

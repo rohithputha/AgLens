@@ -73,7 +73,7 @@ function branchContext(canvas: DesignCanvas): {
         id: option.id,
         title: option.title,
         status: option.status,
-        key_tradeoff: option.description.slice(0, 120),
+        key_tradeoff: (option.description ?? "").slice(0, 120),
       })),
     };
   }
@@ -110,8 +110,24 @@ function branchContext(canvas: DesignCanvas): {
         id: option.id,
         title: option.title,
         status: option.status,
-        key_tradeoff: option.description.slice(0, 120),
+        key_tradeoff: (option.description ?? "").slice(0, 120),
       })),
+  };
+}
+
+// Strip high-token fields that are not useful for conversation context
+function canvasForPrompt(canvas: DesignCanvas) {
+  return {
+    problem_statement: canvas.problem_statement,
+    active_option_id: canvas.active_option_id,
+    options: canvas.options.map((o) => ({
+      id: o.id, title: o.title, description: o.description, status: o.status,
+    })),
+    decisions: canvas.decisions.map((d) => ({
+      id: d.id, title: d.title, reasoning: d.reasoning, trade_offs: d.trade_offs, option_id: d.option_id,
+    })),
+    constraints: canvas.constraints.map((c) => ({ id: c.id, description: c.description, decision_id: c.decision_id })),
+    open_questions: canvas.open_questions.map((q) => ({ id: q.id, question: q.question, status: q.status, decision_id: q.decision_id })),
   };
 }
 
@@ -125,27 +141,15 @@ Behavior:
 - Ask clarifying questions when the requirement is underspecified.
 - Keep responses practical and concise.
 - Prioritize the ACTIVE branch when giving implementation guidance.
-- Keep alternative branches short unless the user explicitly asks to reopen them.
-- Model architecture as a deep DAG of decisions; branches are labels that can diverge at any decision.
 
-Current Design Canvas JSON:
-${JSON.stringify(canvas, null, 2)}
+Canvas:${JSON.stringify(canvasForPrompt(canvas))}
 
-Branch Context:
-${JSON.stringify(branch, null, 2)}
+Branch context:${JSON.stringify(branch)}
 
 After every response append a JSON block wrapped in <design_extract> tags.
 Use this format exactly:
 <design_extract>
-{
-  "problem_statement_update": null,
-  "new_options": [],
-  "option_status_changes": [],
-  "new_decisions": [],
-  "new_constraints": [],
-  "new_open_questions": [],
-  "resolved_questions": []
-}
+{"problem_statement_update":null,"new_options":[],"option_status_changes":[],"new_decisions":[],"new_constraints":[],"new_open_questions":[],"resolved_questions":[]}
 </design_extract>
 
 Only add net-new items from this turn.`;
@@ -153,13 +157,12 @@ Only add net-new items from this turn.`;
 
 function buildCrystallizePrompt(space: DesignSpace): string {
   const branch = branchContext(space.design_canvas);
+  const compactSpace = { ...space, design_canvas: canvasForPrompt(space.design_canvas) };
   return `You are generating final artifacts from an architectural design session.
 
-Input JSON:
-${JSON.stringify(space, null, 2)}
+Input:${JSON.stringify(compactSpace)}
 
-Branch Context:
-${JSON.stringify(branch, null, 2)}
+Branch context:${JSON.stringify(branch)}
 
 Return exactly two outputs:
 1) Design document markdown.
@@ -257,10 +260,12 @@ export async function streamConversation(input: SendConversationInput): Promise<
     max_tokens: 1400,
     stream: true,
     system: buildConversationPrompt(input.canvas),
-    messages: input.conversation.map((message) => ({
-      role: message.role,
-      content: message.content,
-    })),
+    messages: (() => {
+      // Take last 10, then drop leading assistant messages so we always start with "user".
+      let msgs = input.conversation.slice(-10);
+      while (msgs.length > 0 && msgs[0].role !== "user") msgs = msgs.slice(1);
+      return msgs.map((m) => ({ role: m.role, content: m.content ?? "" }));
+    })(),
   };
 
   const response = await fetch(endpointUrl(), {
