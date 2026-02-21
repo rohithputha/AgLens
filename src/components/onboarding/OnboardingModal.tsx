@@ -6,7 +6,7 @@ export function OnboardingModal({ onDismiss }: OnboardingModalProps) {
   return (
     <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/40 p-4">
       <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl">
-        <h2 className="text-lg font-semibold text-slate-900">Welcome to AgLens</h2>
+        <h2 className="text-lg font-semibold text-slate-900">Welcome to ArchLens</h2>
         <p className="mt-2 text-sm text-slate-700">
           Think through architecture decisions in conversation with Claude. Build a structured design
           canvas as you explore, then crystallize it into a design doc and task list.

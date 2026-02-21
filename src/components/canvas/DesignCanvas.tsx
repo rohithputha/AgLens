@@ -1,4 +1,4 @@
-import { type DragEvent, useCallback, useRef, useState } from "react";
+import React, { type DragEvent, useCallback, useRef, useState } from "react";
 import { useAppStore, type CanvasDropTarget } from "../../store/useAppStore";
 import { parseDragPayload, setDragPayload, type CanvasSection } from "../../hooks/useDragDrop";
 
@@ -41,13 +41,12 @@ function SubField({
 
   return (
     <div
-      className={`mt-2 rounded-lg transition-all duration-150 ${
-        isDragOver
+      className={`mt-2 rounded-lg transition-all duration-150 ${isDragOver
           ? "bg-blue-50 ring-1 ring-blue-200 px-3 py-2"
           : expanded
-          ? "bg-slate-50 px-3 py-2"
-          : "border border-dashed border-slate-200 px-3 py-1.5 cursor-text hover:border-slate-300"
-      }`}
+            ? "bg-slate-50 px-3 py-2"
+            : "border border-dashed border-slate-200 px-3 py-1.5 cursor-text hover:border-slate-300"
+        }`}
       onClick={() => {
         setFocused(true);
         setTimeout(() => taRef.current?.focus(), 0);
@@ -344,11 +343,10 @@ export function DesignCanvas({ spaceId, onJumpToMessage }: DesignCanvasProps) {
               return (
                 <div
                   key={option.id}
-                  className={`group relative rounded-xl border bg-white transition-all duration-200 ${
-                    isFocused
+                  className={`group relative rounded-xl border bg-white transition-all duration-200 ${isFocused
                       ? "border-blue-200 shadow-md shadow-blue-100/60"
                       : "border-slate-100 hover:border-slate-200 hover:shadow-md hover:shadow-slate-100/80"
-                  }`}
+                    }`}
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={(e) => dropOnOptionCard(e, option.id)}
                 >

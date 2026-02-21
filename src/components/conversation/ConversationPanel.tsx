@@ -105,9 +105,8 @@ function MessageBubble({
   return (
     <article
       id={`msg-${message.id}`}
-      className={`group relative max-w-[88%] ${
-        isUser ? "ml-auto" : "mr-auto"
-      } ${isHighlighted ? "ring-2 ring-blue-300 rounded-2xl" : ""}`}
+      className={`group relative max-w-[88%] ${isUser ? "ml-auto" : "mr-auto"
+        } ${isHighlighted ? "ring-2 ring-blue-300 rounded-2xl" : ""}`}
     >
       {isUser ? (
         <div
@@ -116,7 +115,6 @@ function MessageBubble({
           onDragStart={handleDragStart}
           className="rounded-2xl rounded-tr-sm bg-slate-900 shadow-sm shadow-slate-900/20 px-4 py-3 text-sm text-white leading-relaxed transition-shadow hover:shadow-md hover:shadow-slate-900/30 cursor-grab active:cursor-grabbing"
         >
-          {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions */}
           <div onMouseDown={handleContentMouseDown} className="cursor-text">
             <p className="whitespace-pre-wrap select-text">
               {message.content || (isSending ? "Thinking…" : "")}
@@ -130,7 +128,6 @@ function MessageBubble({
           onDragStart={handleDragStart}
           className="rounded-2xl rounded-tl-sm bg-slate-50 shadow-sm shadow-slate-100 px-4 py-3 text-sm text-slate-800 leading-relaxed transition-shadow hover:shadow-md hover:shadow-slate-200/60 cursor-grab active:cursor-grabbing"
         >
-          {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions */}
           <div onMouseDown={handleContentMouseDown} className="cursor-text">
             <div className="prose prose-sm prose-slate max-w-none select-text [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:bg-slate-800 [&_pre]:p-3 [&_pre]:text-xs [&_pre]:text-slate-100 [&_pre_code]:bg-transparent [&_pre_code]:text-inherit [&_code]:rounded [&_code]:bg-slate-200 [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-xs [&_code]:text-slate-800">
               <ReactMarkdown remarkPlugins={[remarkGfm]}>
@@ -248,9 +245,9 @@ export const ConversationPanel = forwardRef<ConversationPanelHandle, Conversatio
         >
           {/* Section header */}
           <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
-            <span className="text-[11px] font-medium uppercase tracking-widest text-slate-400">
+            <h2 className="text-[11px] font-medium uppercase tracking-widest text-slate-400">
               Conversation
-            </span>
+            </h2>
             <div className="flex items-center gap-3">
               <button
                 type="button"
