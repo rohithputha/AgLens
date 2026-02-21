@@ -146,48 +146,68 @@ Canvas:${JSON.stringify(canvasForPrompt(canvas))}
 
 Branch context:${JSON.stringify(branch)}
 
+## BRANCH MODEL — READ THIS CAREFULLY
+
+Each branch (option) is an **approach** to the design problem. Its description is a **markdown checklist** — a todo list of questions/tasks that need to be resolved for that approach to be understood and validated. Example:
+\`\`\`
+- [ ] How does nginx handle WebSocket upgrades?
+- [ ] What's the operational cost for the team?
+- [x] Is bidirectional communication required?
+\`\`\`
+
+Your job is to:
+1. Populate a branch's todo list when it's created or underspecified.
+2. As the conversation resolves questions, **tick them off** by replacing \`- [ ]\` with \`- [x]\`.
+3. Add new questions to the list as they surface.
+4. When all (or most) todos are resolved and the branch is well-understood, you may FINISH it.
+
+Always update the branch description via \`set_branch_todos\` — use the actual branch \`id\` from the canvas.
+
 After every response append a JSON block wrapped in <design_extract> tags.
 Use this format exactly:
 <design_extract>
-{"problem_statement_update":null,"new_options":[],"update_options":[],"option_status_changes":[],"new_decisions":[],"update_decisions":[],"new_constraints":[],"new_open_questions":[],"resolved_questions":[]}
+{"problem_statement_update":null,"new_options":[],"update_options":[],"option_status_changes":[],"new_decisions":[],"update_decisions":[],"new_constraints":[],"new_open_questions":[],"resolved_questions":[],"finish_branches":[],"delete_decisions":[],"delete_constraints":[],"delete_open_questions":[],"set_branch_todos":[]}
 </design_extract>
 
-Be AGGRESSIVE. Every turn should populate multiple fields. When in doubt, add it.
+Be AGGRESSIVE. Every turn should populate multiple fields.
 
 WHEN TO USE EACH FIELD:
 
 new_options — Add a branch whenever a distinct approach surfaces, even hypothetically.
-  triggers: "we could use X", "another approach is Y", "what about Z", any comparison of strategies
-  include: title (short name for the approach) + description (what it is, why consider it)
+  triggers: "we could use X", "another approach is Y", "what about Z"
+  include: title (short name) + description (a markdown checklist of 2–4 open questions to explore for this approach, formatted as "- [ ] question")
 
-update_options — Append new details to an EXISTING branch's description.
-  triggers: any new information, trade-off, nuance, or context about an existing approach
-  use the branch's id from the canvas. append, don't repeat what's already there.
+set_branch_todos — Replace a branch's entire todo checklist description.
+  use the branch's id from the canvas. Write out the FULL updated list each time.
+  triggers: resolving a question (change [ ] to [x]), adding a new question, updating the list after discussion
+  example: {"option_id":"abc-123","todos":"- [x] Is bidirectional needed?\\n- [ ] Nginx upgrade support?\\n- [ ] Team familiarity with WS?"}
 
-option_status_changes — Change an option's status.
-  "selected" when: user picks it, you recommend it and they agree, a decision is made for it
-  "rejected" when: user rules it out, it clearly doesn't fit
+finish_branches — Mark a branch as finished (moves to collapsed Finished section).
+  triggers: all todos resolved, user says "done with this", approach fully explored
+  match by option_title. include optional reason.
 
-new_decisions — Add a decision whenever something is SETTLED this turn.
-  triggers: "let's use X", "we'll go with Y", user confirms an approach, you make a strong recommendation they accept
-  include: title (what was decided) + reasoning (why) + trade_offs (what's given up)
+update_options — Append new details to an EXISTING branch's description (use ONLY for non-checklist notes; prefer set_branch_todos for todo updates).
 
-update_decisions — Append new context to an EXISTING decision's reasoning or trade_offs.
-  triggers: any new detail, implication, or nuance about an already-made decision
-  use the decision's id from the canvas.
+option_status_changes — Change status to "selected" or "rejected".
+  "selected": user picks it or commits to it
+  "rejected": user rules it out
 
-new_constraints — Add whenever a hard requirement or limit is stated.
-  triggers: "must", "can't", "required", "budget is X", "team only knows Y", "latency must be under Z"
-  even soft constraints ("we'd prefer") count if they'll shape the design
+new_decisions — Add whenever something SETTLED this turn.
+  triggers: "let's use X", "we'll go with Y", user confirms approach
+  include: title + reasoning + trade_offs
 
-new_open_questions — Add whenever something IMPORTANT is unresolved.
-  triggers: any uncertainty that would change the design if answered differently
-  include a short context explaining why it matters
+update_decisions — Append context to an EXISTING decision.
 
-resolved_questions — Mark resolved whenever this turn's conversation settles an open question.
-  match by the question text from the canvas.
+delete_decisions / delete_constraints / delete_open_questions — Remove stale items by ID.
+  triggers: user says "remove that", item is superseded, approach was rejected
 
-problem_statement_update — Restate the problem only if it materially changes or sharpens this turn.
+new_constraints — Hard requirements: "must", "can't", "required", "budget is X"
+
+new_open_questions — Important unresolved question that would change the design.
+
+resolved_questions — Mark a question resolved when this turn's conversation settles it.
+
+problem_statement_update — Restate the problem only if it materially changes.
 
 Do NOT re-add items already in the canvas. Do NOT leave everything empty — if you said something useful, capture it.`;
 }

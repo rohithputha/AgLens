@@ -55,6 +55,7 @@ interface AppState {
   cycleOptionStatus: (spaceId: string, id: string) => void;
   promoteToDecision: (spaceId: string, optionId: string) => void;
   rejectOption: (spaceId: string, optionId: string) => void;
+  finishBranch: (spaceId: string, optionId: string, reason?: string) => void;
   addDecision: (spaceId: string) => void;
   updateDecision: (spaceId: string, id: string, patch: Partial<Decision>) => void;
   deleteDecision: (spaceId: string, id: string) => void;
@@ -461,6 +462,39 @@ export const useAppStore = create<AppState>()(
             let activeOptionId = space.design_canvas.active_option_id;
             if (activeOptionId === optionId) {
               activeOptionId = options.find((o) => o.status !== "rejected")?.id;
+            }
+
+            // Remove all decisions linked to the rejected branch
+            const decisions = space.design_canvas.decisions.filter(
+              (d) => d.option_id !== optionId,
+            );
+
+            return {
+              ...space,
+              design_canvas: {
+                ...space.design_canvas,
+                options,
+                decisions,
+                active_option_id: activeOptionId,
+              },
+            };
+          }),
+        })),
+
+      finishBranch: (spaceId, optionId, reason) =>
+        set((state) => ({
+          spaces: updateSpace(state.spaces, spaceId, (space) => {
+            const options = space.design_canvas.options.map((o) =>
+              o.id === optionId
+                ? { ...o, status: "finished" as const, finish_reason: reason }
+                : o,
+            );
+
+            let activeOptionId = space.design_canvas.active_option_id;
+            if (activeOptionId === optionId) {
+              activeOptionId = options.find(
+                (o) => o.status === "considering" || o.status === "selected",
+              )?.id;
             }
 
             return {
@@ -1142,6 +1176,43 @@ export const useAppStore = create<AppState>()(
               if (target) {
                 target.status = "resolved";
               }
+            }
+
+            // Finish branches
+            for (const fb of extract.finish_branches ?? []) {
+              const target = canvas.options.find((o) => isNearDuplicate(o.title, fb.option_title));
+              if (target && target.status === "considering") {
+                target.status = "finished";
+                if (fb.reason) target.finish_reason = fb.reason;
+                if (canvas.active_option_id === target.id) {
+                  canvas.active_option_id = canvas.options.find(
+                    (o) => o.status === "considering" || o.status === "selected",
+                  )?.id;
+                }
+              }
+            }
+
+            // Set / replace a branch's todo list
+            for (const tb of extract.set_branch_todos ?? []) {
+              const target = canvas.options.find((o) => o.id === tb.option_id);
+              if (target && tb.todos?.trim()) {
+                target.description = tb.todos.trim();
+              }
+            }
+
+            // Delete decisions by id
+            for (const dd of extract.delete_decisions ?? []) {
+              canvas.decisions = canvas.decisions.filter((d) => d.id !== dd.id);
+            }
+
+            // Delete constraints by id
+            for (const dc of extract.delete_constraints ?? []) {
+              canvas.constraints = canvas.constraints.filter((c) => c.id !== dc.id);
+            }
+
+            // Delete open questions by id
+            for (const dq of extract.delete_open_questions ?? []) {
+              canvas.open_questions = canvas.open_questions.filter((q) => q.id !== dq.id);
             }
 
             canvas.active_option_id = ensureActiveOption({

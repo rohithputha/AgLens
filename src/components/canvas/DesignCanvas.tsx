@@ -15,6 +15,69 @@ function allowDrop(e: React.DragEvent) {
   e.preventDefault();
 }
 
+// ── TodoList ─────────────────────────────────────────────────────────────────
+// Parses a markdown checklist description and renders interactive checkboxes.
+// Lines that are not checklist items are rendered as plain text.
+// Clicking a checkbox toggles the `[ ]` ↔ `[x]` in the raw text and calls onChange.
+
+function parseTodoLines(text: string): Array<{ raw: string; isTodo: boolean; done: boolean; label: string }> {
+  return text.split("\n").map((line) => {
+    const doneMatch = /^- \[x\]\s(.*)/.exec(line);
+    const openMatch = /^- \[ \]\s(.*)/.exec(line);
+    if (doneMatch) return { raw: line, isTodo: true, done: true, label: doneMatch[1] };
+    if (openMatch) return { raw: line, isTodo: true, done: false, label: openMatch[1] };
+    return { raw: line, isTodo: false, done: false, label: line };
+  });
+}
+
+function TodoList({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const lines = parseTodoLines(value);
+  const hasTodos = lines.some((l) => l.isTodo);
+
+  if (!hasTodos || !value.trim()) {
+    // Fallback: plain textarea for non-checklist descriptions
+    return (
+      <textarea
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        rows={3}
+        placeholder="Describe this branch or let the AI populate a todo list…"
+        className="w-full resize-none bg-transparent text-xs text-slate-600 placeholder:text-slate-300 focus:outline-none"
+      />
+    );
+  }
+
+  function toggleLine(index: number) {
+    const updated = lines.map((l, i) => {
+      if (i !== index || !l.isTodo) return l.raw;
+      return l.done ? `- [ ] ${l.label}` : `- [x] ${l.label}`;
+    });
+    onChange(updated.join("\n"));
+  }
+
+  return (
+    <ul className="mt-1 space-y-1">
+      {lines.map((line, i) =>
+        line.isTodo ? (
+          <li key={i} className="flex items-start gap-2">
+            <input
+              type="checkbox"
+              checked={line.done}
+              onChange={() => toggleLine(i)}
+              className="mt-0.5 h-3 w-3 shrink-0 rounded accent-blue-500 cursor-pointer"
+            />
+            <span className={`text-xs leading-snug ${line.done ? "line-through text-slate-300" : "text-slate-600"}`}>
+              {line.label}
+            </span>
+          </li>
+        ) : (
+          <li key={i} className="text-xs text-slate-400 pl-5">{line.raw}</li>
+        )
+      )}
+    </ul>
+  );
+}
+
 // ── SubField ────────────────────────────────────────────────────────────────
 // Collapsed "+ Label" button when empty; expands to a labeled subcard block.
 
@@ -42,10 +105,10 @@ function SubField({
   return (
     <div
       className={`mt-2 rounded-lg transition-all duration-150 ${isDragOver
-          ? "bg-blue-50 ring-1 ring-blue-200 px-3 py-2"
-          : expanded
-            ? "bg-slate-50 px-3 py-2"
-            : "border border-dashed border-slate-200 px-3 py-1.5 cursor-text hover:border-slate-300"
+        ? "bg-blue-50 ring-1 ring-blue-200 px-3 py-2"
+        : expanded
+          ? "bg-slate-50 px-3 py-2"
+          : "border border-dashed border-slate-200 px-3 py-1.5 cursor-text hover:border-slate-300"
         }`}
       onClick={() => {
         setFocused(true);
@@ -183,7 +246,7 @@ export function DesignCanvas({ spaceId, onJumpToMessage }: DesignCanvasProps) {
   const moveOption = useAppStore((s) => s.moveOption);
   const setActiveOption = useAppStore((s) => s.setActiveOption);
   const clearActiveOption = useAppStore((s) => s.clearActiveOption);
-  const promoteToDecision = useAppStore((s) => s.promoteToDecision);
+  const finishBranch = useAppStore((s) => s.finishBranch);
   const rejectOption = useAppStore((s) => s.rejectOption);
   const cycleOptionStatus = useAppStore((s) => s.cycleOptionStatus);
 
@@ -300,8 +363,9 @@ export function DesignCanvas({ spaceId, onJumpToMessage }: DesignCanvasProps) {
     }
   }
 
-  const consideringOptions = options.filter((o) => o.status === "considering");
+  const consideringOptions = options.filter((o) => o.status === "considering" || o.status === "selected");
   const rejectedOptions = options.filter((o) => o.status === "rejected");
+  const finishedOptions = options.filter((o) => o.status === "finished");
 
   return (
     <section
@@ -344,8 +408,8 @@ export function DesignCanvas({ spaceId, onJumpToMessage }: DesignCanvasProps) {
                 <div
                   key={option.id}
                   className={`group relative rounded-xl border bg-white transition-all duration-200 ${isFocused
-                      ? "border-blue-200 shadow-md shadow-blue-100/60"
-                      : "border-slate-100 hover:border-slate-200 hover:shadow-md hover:shadow-slate-100/80"
+                    ? "border-blue-200 shadow-md shadow-blue-100/60"
+                    : "border-slate-100 hover:border-slate-200 hover:shadow-md hover:shadow-slate-100/80"
                     }`}
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={(e) => dropOnOptionCard(e, option.id)}
@@ -355,11 +419,21 @@ export function DesignCanvas({ spaceId, onJumpToMessage }: DesignCanvasProps) {
                   )}
                   <div className="px-4 py-3">
                     <div className="mb-2 flex items-center justify-between">
-                      {isFocused ? (
-                        <span className="text-[11px] font-medium text-blue-500">Focused</span>
-                      ) : (
-                        <span className="text-[11px] text-slate-300">Branch</span>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {isFocused ? (
+                          <span className="text-[11px] font-medium text-blue-500">Focused</span>
+                        ) : (
+                          <span className="text-[11px] text-slate-300">Branch</span>
+                        )}
+                        {(() => {
+                          const todos = parseTodoLines(option.description);
+                          const total = todos.filter((l) => l.isTodo).length;
+                          const done = todos.filter((l) => l.isTodo && l.done).length;
+                          return total > 0 ? (
+                            <span className="text-[10px] text-slate-400">{done}/{total}</span>
+                          ) : null;
+                        })()}
+                      </div>
                       <div className="flex items-center gap-3 opacity-0 group-hover:opacity-100 transition-opacity">
                         {isFocused ? (
                           <button type="button" className="text-[11px] text-slate-400 hover:text-slate-600 transition-colors" onClick={() => clearActiveOption(spaceId)}>
@@ -370,8 +444,8 @@ export function DesignCanvas({ spaceId, onJumpToMessage }: DesignCanvasProps) {
                             Focus
                           </button>
                         )}
-                        <button type="button" className="text-[11px] text-emerald-600 hover:text-emerald-800 transition-colors" onClick={() => promoteToDecision(spaceId, option.id)}>
-                          Decide
+                        <button type="button" className="text-[11px] text-emerald-600 hover:text-emerald-800 transition-colors" onClick={() => finishBranch(spaceId, option.id)}>
+                          Finish
                         </button>
                         <button type="button" className="text-[11px] text-slate-400 hover:text-red-500 transition-colors" onClick={() => rejectOption(spaceId, option.id)}>
                           Reject
@@ -389,12 +463,28 @@ export function DesignCanvas({ spaceId, onJumpToMessage }: DesignCanvasProps) {
                       draggable
                       onDragStart={(e) => startCanvasItemDrag(e, "options", option.id)}
                     />
-                    <SubField
-                      label="Description"
-                      value={option.description}
-                      onChange={(v) => updateOption(spaceId, option.id, { description: v })}
-                      onDropText={(text) => updateOption(spaceId, option.id, { description: option.description ? `${option.description}\n${text}` : text })}
-                    />
+                    <div
+                      className="mt-2"
+                      onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const payload = parseDragPayload(e as unknown as DragEvent);
+                        const text = payload?.kind === "message-fragment" ? payload.text : (e.dataTransfer.getData("text/plain") ?? "").trim();
+                        if (text) {
+                          const current = option.description.trim();
+                          const newLine = `- [ ] ${text.split("\n")[0].slice(0, 120)}`;
+                          updateOption(spaceId, option.id, {
+                            description: current ? `${current}\n${newLine}` : newLine,
+                          });
+                        }
+                      }}
+                    >
+                      <TodoList
+                        value={option.description}
+                        onChange={(v) => updateOption(spaceId, option.id, { description: v })}
+                      />
+                    </div>
                   </div>
                 </div>
               );
@@ -405,7 +495,7 @@ export function DesignCanvas({ spaceId, onJumpToMessage }: DesignCanvasProps) {
           </Section>
         </div>
 
-        {/* ── REJECTED ── */}
+        {/* ── REJECTED & FINISHED ── */}
         {rejectedOptions.length > 0 && (
           <details className="group/rej">
             <summary className="cursor-pointer list-none flex items-center gap-2 select-none">
@@ -426,6 +516,40 @@ export function DesignCanvas({ spaceId, onJumpToMessage }: DesignCanvasProps) {
                       ✕
                     </button>
                   </div>
+                </div>
+              ))}
+            </div>
+          </details>
+        )}
+
+        {finishedOptions.length > 0 && (
+          <details className="group/fin">
+            <summary className="cursor-pointer list-none flex items-center gap-2 select-none">
+              <span className="text-[11px] font-semibold uppercase tracking-widest text-slate-300 group-open/fin:text-emerald-500 transition-colors">
+                Finished
+              </span>
+              <span className="text-[11px] text-slate-300">{finishedOptions.length}</span>
+            </summary>
+            <div className="mt-2 space-y-1.5">
+              {finishedOptions.map((option) => (
+                <div key={option.id} className="rounded-lg border border-emerald-100 bg-emerald-50/40 px-4 py-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-emerald-500">✓</span>
+                      <span className="text-sm text-slate-600 font-medium">{option.title || "Untitled"}</span>
+                    </div>
+                    <div className="flex gap-3">
+                      <button type="button" className="text-[11px] text-slate-400 hover:text-slate-600 transition-colors" onClick={() => cycleOptionStatus(spaceId, option.id)}>
+                        Reopen
+                      </button>
+                      <button type="button" className="text-[11px] text-slate-300 hover:text-red-400 transition-colors" onClick={() => deleteOption(spaceId, option.id)}>
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                  {option.finish_reason && (
+                    <p className="mt-1 text-[11px] text-slate-400 pl-4">{option.finish_reason}</p>
+                  )}
                 </div>
               ))}
             </div>

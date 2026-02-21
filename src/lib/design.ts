@@ -44,6 +44,11 @@ export function createEmptyExtract(): DesignExtract {
     new_constraints: [],
     new_open_questions: [],
     resolved_questions: [],
+    finish_branches: [],
+    delete_decisions: [],
+    delete_constraints: [],
+    delete_open_questions: [],
+    set_branch_todos: [],
   };
 }
 
@@ -65,12 +70,8 @@ export function createNewSpace(title = "Untitled Design"): DesignSpace {
 }
 
 export function statusCycle(status: OptionStatus): OptionStatus {
-  if (status === "considering") {
-    return "selected";
-  }
-  if (status === "selected") {
-    return "rejected";
-  }
+  if (status === "considering") return "selected";
+  if (status === "selected") return "rejected";
   return "considering";
 }
 

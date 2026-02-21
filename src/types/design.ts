@@ -1,5 +1,5 @@
 export type SpaceStatus = "exploring" | "converging" | "crystallized";
-export type OptionStatus = "considering" | "selected" | "rejected";
+export type OptionStatus = "considering" | "selected" | "rejected" | "finished";
 export type ConstraintSource = "conversation" | "code" | "external";
 export type QuestionStatus = "open" | "resolved";
 
@@ -26,6 +26,7 @@ export interface Option {
   description: string;
   status: OptionStatus;
   rejection_reason?: string;
+  finish_reason?: string;
   branch_score?: number;
   source_messages: MessageRef[];
 }
@@ -157,6 +158,19 @@ export interface DesignExtract {
   resolved_questions: Array<{
     question: string;
     resolution?: string;
+  }>;
+  // LLM-controlled deletions and branch lifecycle
+  finish_branches: Array<{
+    option_title: string;
+    reason?: string;
+  }>;
+  delete_decisions: Array<{ id: string }>;
+  delete_constraints: Array<{ id: string }>;
+  delete_open_questions: Array<{ id: string }>;
+  // Replace a branch's entire todo list (markdown checklist)
+  set_branch_todos: Array<{
+    option_id: string;
+    todos: string; // full replacement markdown checklist
   }>;
 }
 
