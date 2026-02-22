@@ -62,19 +62,19 @@ function branchContext(canvas: DesignCanvas): {
     id: string;
     title: string;
     status: string;
-    key_tradeoff: string;
   }>;
 } {
   const active = canvas.options.find((option) => option.id === canvas.active_option_id) ?? null;
   if (!active) {
     return {
       active_option: null,
-      inactive_options: canvas.options.map((option) => ({
-        id: option.id,
-        title: option.title,
-        status: option.status,
-        key_tradeoff: (option.description ?? "").slice(0, 120),
-      })),
+      inactive_options: canvas.options
+        .filter((o) => o.status !== "rejected" && o.status !== "finished")
+        .map((option) => ({
+          id: option.id,
+          title: option.title,
+          status: option.status,
+        })),
     };
   }
 
@@ -101,16 +101,15 @@ function branchContext(canvas: DesignCanvas): {
       id: active.id,
       title: active.title,
       decisions: activeDecisions.map((decision) => ({ id: decision.id, title: decision.title })),
-      constraints: linkedConstraints,
-      open_questions: linkedQuestions,
+      constraints: linkedConstraints.map((c) => c.slice(0, 80)),
+      open_questions: linkedQuestions.map((q) => q.slice(0, 80)),
     },
     inactive_options: canvas.options
-      .filter((option) => option.id !== active.id)
+      .filter((option) => option.id !== active.id && option.status !== "rejected" && option.status !== "finished")
       .map((option) => ({
         id: option.id,
         title: option.title,
         status: option.status,
-        key_tradeoff: (option.description ?? "").slice(0, 120),
       })),
   };
 }
@@ -118,16 +117,46 @@ function branchContext(canvas: DesignCanvas): {
 // Strip high-token fields that are not useful for conversation context
 function canvasForPrompt(canvas: DesignCanvas) {
   return {
-    problem_statement: canvas.problem_statement,
+    problem_statement: canvas.problem_statement?.slice(0, 300),
     active_option_id: canvas.active_option_id,
-    options: canvas.options.map((o) => ({
-      id: o.id, title: o.title, description: o.description, status: o.status,
+    // Active/considering options only — rejected/finished don't need to be in context
+    options: canvas.options
+      .filter((o) => o.status !== "rejected" && o.status !== "finished")
+      .map((o) => ({
+        id: o.id,
+        title: o.title,
+        // Truncate description — checklists can grow long
+        description: (o.description ?? "").slice(0, 300),
+        status: o.status,
+      })),
+    // Decisions: Only include decisions, but include context about option status if finished/rejected
+    decisions: canvas.decisions
+      .map((d) => {
+        const opt = canvas.options.find((o) => o.id === d.option_id);
+        const statusStr =
+          opt && (opt.status === "rejected" || opt.status === "finished")
+            ? ` [From ${opt.status} branch]`
+            : "";
+        const reasonStr =
+          opt?.status === "rejected" && opt.description
+            ? ` (Reason: ${opt.description.slice(0, 50)})`
+            : "";
+        return {
+          id: d.id,
+          title: d.title + statusStr + reasonStr,
+          reasoning: (d.reasoning ?? "").slice(0, 120),
+          option_id: d.option_id,
+        };
+      }),
+    // Constraints: truncated descriptions, no decision_id link (saves tokens)
+    constraints: canvas.constraints.map((c) => ({
+      id: c.id,
+      description: c.description.slice(0, 100),
     })),
-    decisions: canvas.decisions.map((d) => ({
-      id: d.id, title: d.title, reasoning: d.reasoning, trade_offs: d.trade_offs, option_id: d.option_id,
-    })),
-    constraints: canvas.constraints.map((c) => ({ id: c.id, description: c.description, decision_id: c.decision_id })),
-    open_questions: canvas.open_questions.map((q) => ({ id: q.id, question: q.question, status: q.status, decision_id: q.decision_id })),
+    // Only open questions — resolved ones don't belong in working context
+    open_questions: canvas.open_questions
+      .filter((q) => q.status === "open")
+      .map((q) => ({ id: q.id, question: q.question.slice(0, 100) })),
   };
 }
 
@@ -157,16 +186,17 @@ Each branch (option) is an **approach** to the design problem. Its description i
 
 Your job is to:
 1. Populate a branch's todo list when it's created or underspecified.
-2. As the conversation resolves questions, **tick them off** by replacing \`- [ ]\` with \`- [x]\`.
-3. Add new questions to the list as they surface.
-4. When all (or most) todos are resolved and the branch is well-understood, you may FINISH it.
+2. After EVERY user message, **scan all open todos across all branches**. If a user's answer directly or indirectly resolves a todo — or makes it irrelevant — tick it off.
+3. If an answer reveals new complexity or opens sub-questions, add new \`- [ ]\` items.
+4. If ticking off one item makes several others moot (e.g. "we're using Postgres" resolves "which DB?", "do we need caching?", "relational vs document?"), tick them all off.
+5. When all (or most) todos are resolved and the branch is well-understood, you may FINISH it.
 
 Always update the branch description via \`set_branch_todos\` — use the actual branch \`id\` from the canvas.
 
 After every response append a JSON block wrapped in <design_extract> tags.
 Use this format exactly:
 <design_extract>
-{"problem_statement_update":null,"new_options":[],"update_options":[],"option_status_changes":[],"new_decisions":[],"update_decisions":[],"new_constraints":[],"new_open_questions":[],"resolved_questions":[],"finish_branches":[],"delete_decisions":[],"delete_constraints":[],"delete_open_questions":[],"set_branch_todos":[]}
+{"problem_statement_update":null,"new_options":[],"update_options":[],"option_status_changes":[],"new_decisions":[],"update_decisions":[],"new_constraints":[],"update_constraints":[],"new_open_questions":[],"resolved_questions":[],"finish_branches":[],"delete_decisions":[],"delete_constraints":[],"delete_open_questions":[],"set_branch_todos":[]}
 </design_extract>
 
 Be AGGRESSIVE. Every turn should populate multiple fields.
@@ -178,15 +208,18 @@ new_options — Add a branch whenever a distinct approach surfaces, even hypothe
   include: title (short name) + description (a markdown checklist of 2–4 open questions to explore for this approach, formatted as "- [ ] question")
 
 set_branch_todos — Replace a branch's entire todo checklist description.
+  PREFERRED method for ANY change to a branch's checklist.
   use the branch's id from the canvas. Write out the FULL updated list each time.
-  triggers: resolving a question (change [ ] to [x]), adding a new question, updating the list after discussion
+  triggers: resolving a question (change [ ] to [x]), adding a new question, user says "locked in" / "done" / "crossed off"
   example: {"option_id":"abc-123","todos":"- [x] Is bidirectional needed?\\n- [ ] Nginx upgrade support?\\n- [ ] Team familiarity with WS?"}
+  NEVER use update_options to tick off or modify todo items — always use set_branch_todos.
 
 finish_branches — Mark a branch as finished (moves to collapsed Finished section).
   triggers: all todos resolved, user says "done with this", approach fully explored
   match by option_title. include optional reason.
 
-update_options — Append new details to an EXISTING branch's description (use ONLY for non-checklist notes; prefer set_branch_todos for todo updates).
+update_options — Append NEW non-todo notes to a branch's description ONLY.
+  DO NOT use this to tick off items. Use set_branch_todos instead.
 
 option_status_changes — Change status to "selected" or "rejected".
   "selected": user picks it or commits to it
@@ -196,7 +229,19 @@ new_decisions — Add whenever something SETTLED this turn.
   triggers: "let's use X", "we'll go with Y", user confirms approach
   include: title + reasoning + trade_offs
 
-update_decisions — Append context to an EXISTING decision.
+update_decisions — Update an EXISTING decision's reasoning or trade_offs.
+  triggers: user says "update the decision", new information changes the rationale, trade-offs shift
+  use the decision's id from the canvas.
+  - To ADD context: omit "replace" or set replace:false → appends to existing text
+  - To REWRITE: set "replace":true → fully replaces the reasoning/trade_offs
+  example (rewrite): {"id":"dec-123","reasoning":"New rationale after pivot","trade_offs":"New trade-offs","replace":true}
+  Be AGGRESSIVE: if the user makes a relevant choice or pivot, update the affected decision immediately.
+
+update_constraints — Edit an EXISTING constraint's description.
+  use the constraint's id from the canvas. Always fully replaces the description.
+  triggers: user says "update the constraint", constraint wording needs to change, scope changes
+  example: {"id":"con-456","description":"Updated constraint wording"}
+  Be AGGRESSIVE: if something in the conversation changes a constraint, update it.
 
 delete_decisions / delete_constraints / delete_open_questions — Remove stale items by ID.
   triggers: user says "remove that", item is superseded, approach was rejected
@@ -321,7 +366,14 @@ export async function streamConversation(input: SendConversationInput): Promise<
       // Take last 10, then drop leading assistant messages so we always start with "user".
       let msgs = input.conversation.slice(-10);
       while (msgs.length > 0 && msgs[0].role !== "user") msgs = msgs.slice(1);
-      return msgs.map((m) => ({ role: m.role, content: m.content ?? "" }));
+      return msgs.map((m) => ({
+        role: m.role,
+        // Strip <design_extract> blobs from assistant turns — they've already been applied
+        // to the canvas and re-sending them wastes hundreds of tokens per turn.
+        content: m.role === "assistant"
+          ? (m.content ?? "").replace(/<design_extract>[\s\S]*?<\/design_extract>/gi, "").trim()
+          : (m.content ?? ""),
+      }));
     })(),
   };
 

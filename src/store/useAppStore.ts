@@ -1072,10 +1072,38 @@ export const useAppStore = create<AppState>()(
 
             for (const upd of extract.update_options ?? []) {
               const target = canvas.options.find((item) => item.id === upd.id);
-              if (target && upd.description?.trim()) {
+              if (!target || !upd.description?.trim()) continue;
+
+              const incoming = upd.description.trim();
+              // Check if the incoming content contains checked todo items (- [x] label)
+              const checkedMatches = [...incoming.matchAll(/^- \[x\]\s+(.+)$/gim)];
+
+              if (checkedMatches.length > 0 && target.description) {
+                // Smart merge: tick off matching unchecked items in place instead of appending
+                let updated = target.description;
+                for (const m of checkedMatches) {
+                  const label = m[1].trim();
+                  // Replace "- [ ] <label>" with "- [x] <label>" (case-insensitive label match)
+                  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+                  updated = updated.replace(
+                    new RegExp(`^- \\[ \\]\\s+${escaped}\\s*$`, "im"),
+                    `- [x] ${label}`,
+                  );
+                }
+                // Only append lines that weren't a todo-tick (e.g. plain notes from the LLM)
+                const nonTodoLines = incoming
+                  .split("\n")
+                  .filter((line) => !/^- \[.\]/.test(line.trim()))
+                  .join("\n")
+                  .trim();
+                target.description = nonTodoLines
+                  ? `${updated}\n${nonTodoLines}`
+                  : updated;
+              } else {
+                // No todo items — plain append as before
                 target.description = target.description
-                  ? `${target.description}\n${upd.description.trim()}`
-                  : upd.description.trim();
+                  ? `${target.description}\n${incoming}`
+                  : incoming;
               }
             }
 
@@ -1115,14 +1143,18 @@ export const useAppStore = create<AppState>()(
               const target = canvas.decisions.find((item) => item.id === upd.id);
               if (target) {
                 if (upd.reasoning?.trim()) {
-                  target.reasoning = target.reasoning
-                    ? `${target.reasoning}\n${upd.reasoning.trim()}`
-                    : upd.reasoning.trim();
+                  target.reasoning = upd.replace
+                    ? upd.reasoning.trim()
+                    : target.reasoning
+                      ? `${target.reasoning}\n${upd.reasoning.trim()}`
+                      : upd.reasoning.trim();
                 }
                 if (upd.trade_offs?.trim()) {
-                  target.trade_offs = target.trade_offs
-                    ? `${target.trade_offs}\n${upd.trade_offs.trim()}`
-                    : upd.trade_offs.trim();
+                  target.trade_offs = upd.replace
+                    ? upd.trade_offs.trim()
+                    : target.trade_offs
+                      ? `${target.trade_offs}\n${upd.trade_offs.trim()}`
+                      : upd.trade_offs.trim();
                 }
               }
             }
@@ -1148,6 +1180,14 @@ export const useAppStore = create<AppState>()(
                 source_messages: [{ message_id: messageId }],
               });
               refs.push({ type: "constraint", id });
+            }
+
+            // Update existing constraints by id
+            for (const uc of extract.update_constraints ?? []) {
+              const target = canvas.constraints.find((c) => c.id === uc.id);
+              if (target && uc.description?.trim()) {
+                target.description = uc.description.trim();
+              }
             }
 
             for (const question of extract.new_open_questions) {
