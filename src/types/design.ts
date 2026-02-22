@@ -146,10 +146,15 @@ export interface DesignExtract {
     id: string;
     reasoning?: string;
     trade_offs?: string;
+    replace?: boolean; // if true, fully replaces the field instead of appending
   }>;
   new_constraints: Array<{
     description: string;
     source: ConstraintSource;
+  }>;
+  update_constraints: Array<{
+    id: string;
+    description: string; // replaces the constraint description
   }>;
   new_open_questions: Array<{
     question: string;

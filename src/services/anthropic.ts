@@ -167,7 +167,7 @@ Always update the branch description via \`set_branch_todos\` — use the actual
 After every response append a JSON block wrapped in <design_extract> tags.
 Use this format exactly:
 <design_extract>
-{"problem_statement_update":null,"new_options":[],"update_options":[],"option_status_changes":[],"new_decisions":[],"update_decisions":[],"new_constraints":[],"new_open_questions":[],"resolved_questions":[],"finish_branches":[],"delete_decisions":[],"delete_constraints":[],"delete_open_questions":[],"set_branch_todos":[]}
+{"problem_statement_update":null,"new_options":[],"update_options":[],"option_status_changes":[],"new_decisions":[],"update_decisions":[],"new_constraints":[],"update_constraints":[],"new_open_questions":[],"resolved_questions":[],"finish_branches":[],"delete_decisions":[],"delete_constraints":[],"delete_open_questions":[],"set_branch_todos":[]}
 </design_extract>
 
 Be AGGRESSIVE. Every turn should populate multiple fields.
@@ -200,7 +200,19 @@ new_decisions — Add whenever something SETTLED this turn.
   triggers: "let's use X", "we'll go with Y", user confirms approach
   include: title + reasoning + trade_offs
 
-update_decisions — Append context to an EXISTING decision.
+update_decisions — Update an EXISTING decision's reasoning or trade_offs.
+  triggers: user says "update the decision", new information changes the rationale, trade-offs shift
+  use the decision's id from the canvas.
+  - To ADD context: omit "replace" or set replace:false → appends to existing text
+  - To REWRITE: set "replace":true → fully replaces the reasoning/trade_offs
+  example (rewrite): {"id":"dec-123","reasoning":"New rationale after pivot","trade_offs":"New trade-offs","replace":true}
+  Be AGGRESSIVE: if the user makes a relevant choice or pivot, update the affected decision immediately.
+
+update_constraints — Edit an EXISTING constraint's description.
+  use the constraint's id from the canvas. Always fully replaces the description.
+  triggers: user says "update the constraint", constraint wording needs to change, scope changes
+  example: {"id":"con-456","description":"Updated constraint wording"}
+  Be AGGRESSIVE: if something in the conversation changes a constraint, update it.
 
 delete_decisions / delete_constraints / delete_open_questions — Remove stale items by ID.
   triggers: user says "remove that", item is superseded, approach was rejected

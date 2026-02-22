@@ -1143,14 +1143,18 @@ export const useAppStore = create<AppState>()(
               const target = canvas.decisions.find((item) => item.id === upd.id);
               if (target) {
                 if (upd.reasoning?.trim()) {
-                  target.reasoning = target.reasoning
-                    ? `${target.reasoning}\n${upd.reasoning.trim()}`
-                    : upd.reasoning.trim();
+                  target.reasoning = upd.replace
+                    ? upd.reasoning.trim()
+                    : target.reasoning
+                      ? `${target.reasoning}\n${upd.reasoning.trim()}`
+                      : upd.reasoning.trim();
                 }
                 if (upd.trade_offs?.trim()) {
-                  target.trade_offs = target.trade_offs
-                    ? `${target.trade_offs}\n${upd.trade_offs.trim()}`
-                    : upd.trade_offs.trim();
+                  target.trade_offs = upd.replace
+                    ? upd.trade_offs.trim()
+                    : target.trade_offs
+                      ? `${target.trade_offs}\n${upd.trade_offs.trim()}`
+                      : upd.trade_offs.trim();
                 }
               }
             }
@@ -1176,6 +1180,14 @@ export const useAppStore = create<AppState>()(
                 source_messages: [{ message_id: messageId }],
               });
               refs.push({ type: "constraint", id });
+            }
+
+            // Update existing constraints by id
+            for (const uc of extract.update_constraints ?? []) {
+              const target = canvas.constraints.find((c) => c.id === uc.id);
+              if (target && uc.description?.trim()) {
+                target.description = uc.description.trim();
+              }
             }
 
             for (const question of extract.new_open_questions) {
