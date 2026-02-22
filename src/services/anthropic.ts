@@ -62,19 +62,19 @@ function branchContext(canvas: DesignCanvas): {
     id: string;
     title: string;
     status: string;
-    key_tradeoff: string;
   }>;
 } {
   const active = canvas.options.find((option) => option.id === canvas.active_option_id) ?? null;
   if (!active) {
     return {
       active_option: null,
-      inactive_options: canvas.options.map((option) => ({
-        id: option.id,
-        title: option.title,
-        status: option.status,
-        key_tradeoff: (option.description ?? "").slice(0, 120),
-      })),
+      inactive_options: canvas.options
+        .filter((o) => o.status !== "rejected" && o.status !== "finished")
+        .map((option) => ({
+          id: option.id,
+          title: option.title,
+          status: option.status,
+        })),
     };
   }
 
@@ -101,16 +101,15 @@ function branchContext(canvas: DesignCanvas): {
       id: active.id,
       title: active.title,
       decisions: activeDecisions.map((decision) => ({ id: decision.id, title: decision.title })),
-      constraints: linkedConstraints,
-      open_questions: linkedQuestions,
+      constraints: linkedConstraints.map((c) => c.slice(0, 80)),
+      open_questions: linkedQuestions.map((q) => q.slice(0, 80)),
     },
     inactive_options: canvas.options
-      .filter((option) => option.id !== active.id)
+      .filter((option) => option.id !== active.id && option.status !== "rejected" && option.status !== "finished")
       .map((option) => ({
         id: option.id,
         title: option.title,
         status: option.status,
-        key_tradeoff: (option.description ?? "").slice(0, 120),
       })),
   };
 }
@@ -118,16 +117,39 @@ function branchContext(canvas: DesignCanvas): {
 // Strip high-token fields that are not useful for conversation context
 function canvasForPrompt(canvas: DesignCanvas) {
   return {
-    problem_statement: canvas.problem_statement,
+    problem_statement: canvas.problem_statement?.slice(0, 300),
     active_option_id: canvas.active_option_id,
-    options: canvas.options.map((o) => ({
-      id: o.id, title: o.title, description: o.description, status: o.status,
+    // Active/considering options only — rejected/finished don't need to be in context
+    options: canvas.options
+      .filter((o) => o.status !== "rejected" && o.status !== "finished")
+      .map((o) => ({
+        id: o.id,
+        title: o.title,
+        // Truncate description — checklists can grow long
+        description: (o.description ?? "").slice(0, 300),
+        status: o.status,
+      })),
+    // Decisions: only from active/considering branches — inactive branch decisions are not needed
+    decisions: canvas.decisions
+      .filter((d) => {
+        const opt = canvas.options.find((o) => o.id === d.option_id);
+        return !opt || (opt.status !== "rejected" && opt.status !== "finished");
+      })
+      .map((d) => ({
+        id: d.id,
+        title: d.title,
+        reasoning: (d.reasoning ?? "").slice(0, 120),
+        option_id: d.option_id,
+      })),
+    // Constraints: truncated descriptions, no decision_id link (saves tokens)
+    constraints: canvas.constraints.map((c) => ({
+      id: c.id,
+      description: c.description.slice(0, 100),
     })),
-    decisions: canvas.decisions.map((d) => ({
-      id: d.id, title: d.title, reasoning: d.reasoning, trade_offs: d.trade_offs, option_id: d.option_id,
-    })),
-    constraints: canvas.constraints.map((c) => ({ id: c.id, description: c.description, decision_id: c.decision_id })),
-    open_questions: canvas.open_questions.map((q) => ({ id: q.id, question: q.question, status: q.status, decision_id: q.decision_id })),
+    // Only open questions — resolved ones don't belong in working context
+    open_questions: canvas.open_questions
+      .filter((q) => q.status === "open")
+      .map((q) => ({ id: q.id, question: q.question.slice(0, 100) })),
   };
 }
 
@@ -337,7 +359,14 @@ export async function streamConversation(input: SendConversationInput): Promise<
       // Take last 10, then drop leading assistant messages so we always start with "user".
       let msgs = input.conversation.slice(-10);
       while (msgs.length > 0 && msgs[0].role !== "user") msgs = msgs.slice(1);
-      return msgs.map((m) => ({ role: m.role, content: m.content ?? "" }));
+      return msgs.map((m) => ({
+        role: m.role,
+        // Strip <design_extract> blobs from assistant turns — they've already been applied
+        // to the canvas and re-sending them wastes hundreds of tokens per turn.
+        content: m.role === "assistant"
+          ? (m.content ?? "").replace(/<design_extract>[\s\S]*?<\/design_extract>/gi, "").trim()
+          : (m.content ?? ""),
+      }));
     })(),
   };
 
