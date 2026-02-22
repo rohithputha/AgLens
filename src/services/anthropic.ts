@@ -129,18 +129,25 @@ function canvasForPrompt(canvas: DesignCanvas) {
         description: (o.description ?? "").slice(0, 300),
         status: o.status,
       })),
-    // Decisions: only from active/considering branches — inactive branch decisions are not needed
+    // Decisions: Only include decisions, but include context about option status if finished/rejected
     decisions: canvas.decisions
-      .filter((d) => {
+      .map((d) => {
         const opt = canvas.options.find((o) => o.id === d.option_id);
-        return !opt || (opt.status !== "rejected" && opt.status !== "finished");
-      })
-      .map((d) => ({
-        id: d.id,
-        title: d.title,
-        reasoning: (d.reasoning ?? "").slice(0, 120),
-        option_id: d.option_id,
-      })),
+        const statusStr =
+          opt && (opt.status === "rejected" || opt.status === "finished")
+            ? ` [From ${opt.status} branch]`
+            : "";
+        const reasonStr =
+          opt?.status === "rejected" && opt.description
+            ? ` (Reason: ${opt.description.slice(0, 50)})`
+            : "";
+        return {
+          id: d.id,
+          title: d.title + statusStr + reasonStr,
+          reasoning: (d.reasoning ?? "").slice(0, 120),
+          option_id: d.option_id,
+        };
+      }),
     // Constraints: truncated descriptions, no decision_id link (saves tokens)
     constraints: canvas.constraints.map((c) => ({
       id: c.id,
