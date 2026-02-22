@@ -101,8 +101,8 @@ function branchContext(canvas: DesignCanvas): {
       id: active.id,
       title: active.title,
       decisions: activeDecisions.map((decision) => ({ id: decision.id, title: decision.title })),
-      constraints: linkedConstraints.map((c) => c.slice(0, 80)),
-      open_questions: linkedQuestions.map((q) => q.slice(0, 80)),
+      constraints: linkedConstraints.map((c) => c?.slice(0, 80) ?? ""),
+      open_questions: linkedQuestions.map((q) => q?.slice(0, 80) ?? ""),
     },
     inactive_options: canvas.options
       .filter((option) => option.id !== active.id && option.status !== "rejected" && option.status !== "finished")
@@ -149,14 +149,14 @@ function canvasForPrompt(canvas: DesignCanvas) {
         };
       }),
     // Constraints: truncated descriptions, no decision_id link (saves tokens)
-    constraints: canvas.constraints.map((c) => ({
+    constraints: (canvas.constraints || []).map((c) => ({
       id: c.id,
-      description: c.description.slice(0, 100),
+      description: c.description?.slice(0, 100) ?? "",
     })),
     // Only open questions — resolved ones don't belong in working context
-    open_questions: canvas.open_questions
+    open_questions: (canvas.open_questions || [])
       .filter((q) => q.status === "open")
-      .map((q) => ({ id: q.id, question: q.question.slice(0, 100) })),
+      .map((q) => ({ id: q.id, question: q.question?.slice(0, 100) ?? "" })),
   };
 }
 
