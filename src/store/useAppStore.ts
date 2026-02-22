@@ -139,7 +139,8 @@ function moveById<T extends { id: string }>(items: T[], draggedId: string, targe
 }
 
 function compactTitle(text: string): string {
-  return text.trim().split("\n")[0].slice(0, 80) || "Imported item";
+  if (!text) return "Imported item";
+  return text.trim().split("\n")[0]?.slice(0, 80) || "Imported item";
 }
 
 

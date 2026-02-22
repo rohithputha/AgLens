@@ -80,7 +80,7 @@ function MessageBubble({
       const ghost = document.createElement("div");
       ghost.textContent = useSelected
         ? useSelected.slice(0, 50) + (useSelected.length > 50 ? "…" : "")
-        : message.content.slice(0, 50) + (message.content.length > 50 ? "…" : "");
+        : (message.content || "").slice(0, 50) + ((message.content?.length || 0) > 50 ? "…" : "");
       ghost.style.cssText =
         "position:fixed;top:-1000px;left:-1000px;padding:6px 12px;border-radius:8px;font-size:12px;max-width:250px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;" +
         (message.role === "user"
